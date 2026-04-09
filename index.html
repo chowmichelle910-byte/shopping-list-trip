@@ -3,63 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>福岡購物助手</title>
+    <title>🌸 福岡購物助手 🌸</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'kawaii-pink': '#FFD1DC',    /* 蜜桃粉 */
+                        'kawaii-blue': '#B2EBF2',    /* 蒂芬妮藍 */
+                        'kawaii-yellow': '#FFF9C4',  /* 奶油黃 */
+                        'kawaii-text': '#5D4037',    /* 棕色字體 (比純黑柔和) */
+                    },
+                    fontFamily: {
+                        'nunito': ['Nunito', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        'xl': '1rem',
+                        '2xl': '1.5rem',
+                    },
+                }
+            }
+        }
+    </script>
+    
     <style>
-        .line-through-dim { text-decoration: line-through; opacity: 0.5; }
+        body { font-family: 'Nunito', sans-serif; color: #5D4037; }
+        
+        /* 可愛嘅微動畫 (彈跳) */
+        @keyframes bounce {
+            0%, 100% { transform: translateY(-5%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+            50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); }
+        }
+        .kawaii-bounce { animation: bounce 1s infinite; }
+        
+        /* 刪除線+變淡 (isChecked) */
+        .line-through-dim { text-decoration: line-through; opacity: 0.5; color: #9E9E9E; }
+        
+        /* 自定義可愛 Checkbox */
+        input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+            position: relative;
+            outline: none;
+        }
+        input[type="checkbox"]::before {
+            content: "🤍"; /* 未選取 (白色心形) */
+            font-size: 1.5rem;
+            position: absolute;
+            left: -5px;
+            top: -5px;
+        }
+        input[type="checkbox"]:checked::before {
+            content: "💖"; /* 已選取 (粉色心形) */
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen pb-24">
-    <div id="app" class="max-w-md mx-auto">
-        <div v-if="loading" class="p-10 text-center">讀取福岡行程中...</div>
+<body class="bg-kawaii-yellow/50 min-h-screen pb-28">
+    <div id="app" class="max-w-md mx-auto relative">
+        
+        <div v-if="loading" class="fixed inset-0 bg-white/80 flex flex-col items-center justify-center z-50">
+            <div class="text-7xl mb-6 kawaii-bounce">✈️</div>
+            <div class="text-xl font-bold text-gray-600">Fukuoka Is Calling...</div>
+            <div class="text-gray-500 mt-2">（從 Sheets 拉取清單中）</div>
+        </div>
 
         <div v-else>
-            <div class="sticky top-0 bg-white shadow-md z-10">
-                <div class="flex overflow-x-auto p-2 gap-2 border-b">
+            <div class="sticky top-0 bg-white/95 shadow-sm z-10 rounded-b-2xl backdrop-blur-sm border-b border-kawaii-pink/50">
+                <div class="p-3 text-center border-b border-gray-100">
+                    <h1 class="text-xl font-bold flex items-center justify-center gap-2">
+                        🌸 福岡購物キラキラ 🌸
+                    </h1>
+                </div>
+                
+                <div class="flex overflow-x-auto p-3 gap-2 scrollbar-hide">
                     <button v-for="store in stores" :key="store.storeId"
                         @click="selectedStoreId = store.storeId"
-                        :class="['px-4 py-2 rounded-full whitespace-nowrap text-sm transition', 
-                                selectedStoreId === store.storeId ? 'bg-blue-600 text-white' : 'bg-gray-200']">
-                        {{ store.storeName }}
+                        :class="['px-5 py-2.5 rounded-full whitespace-nowrap text-sm font-semibold transition-all duration-300 shadow-inner', 
+                                selectedStoreId === store.storeId ? 'bg-kawaii-blue text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-500 hover:bg-gray-200']">
+                        🛍️ {{ store.storeName }}
                     </button>
                 </div>
 
-                <div v-if="currentStore" class="p-3 text-xs text-gray-600 bg-blue-50">
+                <div v-if="currentStore" class="mx-3 mb-3 p-3 text-xs bg-kawaii-yellow rounded-xl border border-dashed border-gray-300 shadow-inner">
                     <p>📍 {{ currentStore.address }}</p>
-                    <p>⏰ {{ currentStore.openingHours }} | 🕒 預計: {{ currentStore.visitTime }}</p>
+                    <div class="flex justify-between items-center mt-1 text-gray-500">
+                        <p>⏰ {{ currentStore.openingHours }}</p>
+                        <p class="font-bold">🕒 {{ currentStore.visitTime }}</p>
+                    </div>
                 </div>
 
-                <div class="flex border-b">
+                <div class="flex border-b border-gray-100 mx-3 mb-2 bg-gray-50 rounded-lg p-1">
                     <button v-for="f in ['All', 'To Buy', 'Done']" :key="f"
                         @click="filter = f"
-                        :class="['flex-1 py-2 text-sm', filter === f ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : '']">
-                        {{ f === 'All' ? '全部' : f === 'To Buy' ? '未買' : '已買' }}
+                        :class="['flex-1 py-1.5 text-sm font-bold rounded-md transition-all', 
+                                filter === f ? 'bg-white text-kawaii-text shadow-sm' : 'text-gray-400 hover:text-gray-600']">
+                        {{ f === 'All' ? '全部 ✨' : f === 'To Buy' ? '未買 🛒' : '已買 ✅' }}
                     </button>
                 </div>
             </div>
 
             <div class="p-4 space-y-4">
-                <div v-for="item in filteredItems" :key="item.itemId" 
-                    class="flex items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-                    <img :src="item.imageUrl || 'https://via.placeholder.com/60'" 
-                        class="w-16 h-16 object-cover rounded mr-4 bg-gray-100"
-                        @error="$event.target.src='https://via.placeholder.com/60'">
-                    <div class="flex-1">
-                        <h3 :class="['font-medium', item.isChecked ? 'line-through-dim' : 'text-gray-800']">
-                            {{ item.itemName }}
-                        </h3>
+                <transition-group name="list">
+                    <div v-for="item in filteredItems" :key="item.itemId" 
+                        class="flex items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transform transition hover:shadow-md hover:-translate-y-0.5">
+                        
+                        <img :src="item.imageUrl || 'https://via.placeholder.com/60?text=No+Photo'" 
+                            class="w-16 h-16 object-cover rounded-xl mr-4 bg-gray-100 border-2 border-kawaii-pink/20 shadow-inner"
+                            @error="$event.target.src='https://via.placeholder.com/60?text=No+Photo'">
+                        
+                        <div class="flex-1">
+                            <h3 :class="['font-bold text-base', item.isChecked ? 'line-through-dim' : 'text-kawaii-text']">
+                                {{ item.itemName }}
+                            </h3>
+                            <div v-if="!item.isChecked" class="text-xs text-gray-400 mt-0.5">（快快搵貨！）</div>
+                        </div>
+                        
+                        <input type="checkbox" v-model="item.isChecked" @change="addPending(item)"
+                            class="w-7 h-7">
                     </div>
-                    <input type="checkbox" v-model="item.isChecked" @change="addPending(item)"
-                        class="w-7 h-7 rounded border-gray-300 text-blue-600">
-                </div>
+                </transition-group>
             </div>
 
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t max-w-md mx-auto">
+            <div class="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-white/95 border-t border-gray-100 max-w-md mx-auto rounded-t-2xl shadow-lg backdrop-blur-sm">
                 <button @click="handleSync" :disabled="pendingCount === 0 || saving"
-                    :class="['w-full py-3 rounded-xl font-bold text-white transition shadow-lg', 
-                            pendingCount === 0 ? 'bg-gray-400' : 'bg-green-600 active:bg-green-700']">
-                    {{ saving ? '同步中...' : `儲存改動 (${pendingCount})` }}
+                    :class="['w-full py-3.5 rounded-2xl font-bold text-white text-lg transition-all duration-300 shadow-md flex items-center justify-center gap-2', 
+                            pendingCount === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-kawaii-pink hover:bg-pink-300 active:scale-95 active:shadow-inner']">
+                    <span v-if="saving" class="kawaii-bounce">✈️</span>
+                    <span v-else>{{ saving ? '同步中...' : `儲存改動 (x${pendingCount}) ✨` }}</span>
                 </button>
             </div>
         </div>
@@ -67,7 +142,7 @@
 
     <script>
         const { createApp, ref, computed, onMounted } = Vue;
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbxP6Au0rO-gKhlh2hscTf9CCoNLJWC-ZY3zmtX4JlXzQbi5tVA5Uwk6JDn7lYy4d6P2/exec"; // 👈 記得填返呢度
+        const GAS_URL = "你的_GAS_DEPLOY_URL"; // 👈 一定要填返呢度！
 
         createApp({
             setup() {
@@ -84,12 +159,13 @@
                         const res = await fetch(GAS_URL);
                         const data = await res.json();
                         stores.value = data.stores;
+                        // 修正 isChecked 類型 (處理來自 Sheets 的 TRUE/FALSE 字串)
                         allItems.value = data.items.map(item => ({
                             ...item,
                             isChecked: String(item.isChecked).toUpperCase() === 'TRUE'
                         }));
                         if (stores.value.length > 0) selectedStoreId.value = stores.value[0].storeId;
-                    } catch (e) { alert("讀取失敗，請檢查 GAS URL"); }
+                    } catch (e) { alert("讀取失敗，請檢查 GAS URL 或網絡接駁狀態"); }
                     loading.value = false;
                 };
 
@@ -120,12 +196,12 @@
                     try {
                         await fetch(GAS_URL, {
                             method: 'POST',
-                            mode: 'no-cors', // 靜態網頁通常需要 no-cors
+                            mode: 'no-cors', // 靜態網頁通常需要 no-cors，但會收唔到 success 回傳
                             body: JSON.stringify(payload)
                         });
-                        alert("已發送更新請求！(因安全限制，請重新整理確認狀態)");
+                        alert("已發送更新請求！💖 (因 Vercel 安全限制，請重新整理確認狀態)");
                         pendingChanges.value = {};
-                    } catch (e) { alert("儲存失敗"); }
+                    } catch (e) { alert("儲存失敗 😿"); }
                     saving.value = false;
                 };
 
