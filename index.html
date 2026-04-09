@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>福岡購物助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        .line-through-dim { text-decoration: line-through; opacity: 0.5; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-24">
+    <div id="app" class="max-w-md mx-auto">
+        <div v-if="loading" class="p-10 text-center">讀取福岡行程中...</div>
+
+        <div v-else>
+            <div class="sticky top-0 bg-white shadow-md z-10">
+                <div class="flex overflow-x-auto p-2 gap-2 border-b">
+                    <button v-for="store in stores" :key="store.storeId"
+                        @click="selectedStoreId = store.storeId"
+                        :class="['px-4 py-2 rounded-full whitespace-nowrap text-sm transition', 
+                                selectedStoreId === store.storeId ? 'bg-blue-600 text-white' : 'bg-gray-200']">
+                        {{ store.storeName }}
+                    </button>
+                </div>
+
+                <div v-if="currentStore" class="p-3 text-xs text-gray-600 bg-blue-50">
+                    <p>📍 {{ currentStore.address }}</p>
+                    <p>⏰ {{ currentStore.openingHours }} | 🕒 預計: {{ currentStore.visitTime }}</p>
+                </div>
+
+                <div class="flex border-b">
+                    <button v-for="f in ['All', 'To Buy', 'Done']" :key="f"
+                        @click="filter = f"
+                        :class="['flex-1 py-2 text-sm', filter === f ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : '']">
+                        {{ f === 'All' ? '全部' : f === 'To Buy' ? '未買' : '已買' }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-4 space-y-4">
+                <div v-for="item in filteredItems" :key="item.itemId" 
+                    class="flex items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                    <img :src="item.imageUrl || 'https://via.placeholder.com/60'" 
+                        class="w-16 h-16 object-cover rounded mr-4 bg-gray-100"
+                        @error="$event.target.src='https://via.placeholder.com/60'">
+                    <div class="flex-1">
+                        <h3 :class="['font-medium', item.isChecked ? 'line-through-dim' : 'text-gray-800']">
+                            {{ item.itemName }}
+                        </h3>
+                    </div>
+                    <input type="checkbox" v-model="item.isChecked" @change="addPending(item)"
+                        class="w-7 h-7 rounded border-gray-300 text-blue-600">
+                </div>
+            </div>
+
+            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t max-w-md mx-auto">
+                <button @click="handleSync" :disabled="pendingCount === 0 || saving"
+                    :class="['w-full py-3 rounded-xl font-bold text-white transition shadow-lg', 
+                            pendingCount === 0 ? 'bg-gray-400' : 'bg-green-600 active:bg-green-700']">
+                    {{ saving ? '同步中...' : `儲存改動 (${pendingCount})` }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxP6Au0rO-gKhlh2hscTf9CCoNLJWC-ZY3zmtX4JlXzQbi5tVA5Uwk6JDn7lYy4d6P2/exec"; // 👈 記得填返呢度
+
+        createApp({
+            setup() {
+                const stores = ref([]);
+                const allItems = ref([]);
+                const selectedStoreId = ref(null);
+                const filter = ref('All');
+                const pendingChanges = ref({});
+                const loading = ref(true);
+                const saving = ref(false);
+
+                const fetchData = async () => {
+                    try {
+                        const res = await fetch(GAS_URL);
+                        const data = await res.json();
+                        stores.value = data.stores;
+                        allItems.value = data.items.map(item => ({
+                            ...item,
+                            isChecked: String(item.isChecked).toUpperCase() === 'TRUE'
+                        }));
+                        if (stores.value.length > 0) selectedStoreId.value = stores.value[0].storeId;
+                    } catch (e) { alert("讀取失敗，請檢查 GAS URL"); }
+                    loading.value = false;
+                };
+
+                const currentStore = computed(() => stores.value.find(s => s.storeId === selectedStoreId.value));
+
+                const filteredItems = computed(() => {
+                    return allItems.value.filter(item => {
+                        if (item.storeId !== selectedStoreId.value) return false;
+                        if (filter.value === 'To Buy') return !item.isChecked;
+                        if (filter.value === 'Done') return item.isChecked;
+                        return true;
+                    });
+                });
+
+                const addPending = (item) => {
+                    pendingChanges.value[item.itemId] = item.isChecked;
+                };
+
+                const pendingCount = computed(() => Object.keys(pendingChanges.value).length);
+
+                const handleSync = async () => {
+                    saving.value = true;
+                    const payload = Object.keys(pendingChanges.value).map(id => ({
+                        itemId: id,
+                        isChecked: pendingChanges.value[id]
+                    }));
+
+                    try {
+                        await fetch(GAS_URL, {
+                            method: 'POST',
+                            mode: 'no-cors', // 靜態網頁通常需要 no-cors
+                            body: JSON.stringify(payload)
+                        });
+                        alert("已發送更新請求！(因安全限制，請重新整理確認狀態)");
+                        pendingChanges.value = {};
+                    } catch (e) { alert("儲存失敗"); }
+                    saving.value = false;
+                };
+
+                onMounted(fetchData);
+
+                return { stores, allItems, selectedStoreId, filter, loading, saving, currentStore, filteredItems, addPending, pendingCount, handleSync };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
