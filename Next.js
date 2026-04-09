@@ -1,148 +1,149 @@
-import { useEffect, useState, useMemo } from "react";
+"use client";
+import React, { useState, useEffect } from 'react';
 
-const BASE_GAS_URL = "https://script.google.com/macros/s/AKfycbxP6Au0rO-gKhlh2hscTf9CCoNLJWC-ZY3zmtX4JlXzQbi5tVA5Uwk6JDn7lYy4d6P2/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxP6Au0rO-gKhlh2hscTf9CCoNLJWC-ZY3zmtX4JlXzQbi5tVA5Uwk6JDn7lYy4d6P2/exec";
 
-export default function Home() {
+export default function FukuokaPlanner() {
   const [stores, setStores] = useState([]);
-  const [selectedStore, setSelectedStore] = useState(null);
-  const [items, setItems] = useState([]);
-  const [checkedItems, setCheckedItems] = useState(new Set());
-  const [tab, setTab] = useState("all");
-  const [loading, setLoading] = useState(false);
+  const [allItems, setAllItems] = useState([]);
+  const [selectedStoreId, setSelectedStoreId] = useState(null);
+  const [filter, setFilter] = useState('All'); // 'All', 'To Buy', 'Done'
+  const [pendingChanges, setPendingChanges] = useState({}); // 暫存未儲存的改動
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
+  // 1. 初始化載入數據
   useEffect(() => {
-    fetchStores();
+    fetchData();
   }, []);
 
-  const fetchStores = async () => {
-    try {
-      const res = await fetch(`${BASE_GAS_URL}?path=stores`);
-      const json = await res.json();
-      setStores(json.stores || []);
-    } catch (e) {
-      console.error("無法載入店舖列表");
-    }
-  };
-
-  const fetchItemsByStore = async (store) => {
+  const fetchData = async () => {
     setLoading(true);
-    setSelectedStore(store);
-    try {
-      const res = await fetch(`${BASE_GAS_URL}?path=items&storeId=${store.storeId}`);
-      const json = await res.json();
-      setItems(json.items || []);
-      setCheckedItems(new Set()); 
-    } catch (e) {
-      console.error("無法載入商品清單");
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch(GAS_URL);
+    const data = await res.json();
+    setStores(data.stores);
+    setAllItems(data.items);
+    if (data.stores.length > 0) setSelectedStoreId(data.stores[0].storeId);
+    setLoading(false);
   };
 
-  const displayItems = useMemo(() => {
-    if (tab === "toBuy") return items.filter(i => i.isChecked === "false" || !i.isChecked);
-    if (tab === "done") return items.filter(i => i.isChecked === "true");
-    return items;
-  }, [items, tab]);
-
-  const handleCheck = (itemId, isChecked) => {
-    setCheckedItems(prev => new Set(prev).add(String(itemId)));
-    setItems(prev => prev.map(i => 
-      i.itemId === itemId ? { ...i, isChecked: isChecked ? "true" : "false" } : i
+  // 2. 處理 Checkbox 改動 (僅暫存在 state)
+  const handleCheck = (itemId, currentStatus) => {
+    const newStatus = !currentStatus;
+    // 更新本地顯示
+    setAllItems(prev => prev.map(item => 
+      item.itemId === itemId ? { ...item, isChecked: newStatus } : item
     ));
+    // 記錄待儲存項
+    setPendingChanges(prev => ({ ...prev, [itemId]: newStatus }));
   };
 
-  const handleSave = async () => {
-    if (checkedItems.size === 0) return;
-    setLoading(true);
-    const toSave = items
-      .filter(i => checkedItems.has(String(i.itemId)))
-      .map(i => ({ itemId: i.itemId, isChecked: i.isChecked === "true" }));
+  // 3. 批次同步回 Google Sheets
+  const handleSync = async () => {
+    if (Object.keys(pendingChanges).length === 0) return;
+    setSaving(true);
+    const payload = Object.keys(pendingChanges).map(id => ({
+      itemId: id,
+      isChecked: pendingChanges[id]
+    }));
 
-    try {
-      // GAS POST 必須使用 no-cors 模式
-      await fetch(BASE_GAS_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: toSave }),
-      });
-      alert("儲存成功！");
-      setCheckedItems(new Set());
-    } catch (e) {
-      alert("儲存失敗");
-    } finally {
-      setLoading(false);
-    }
+    await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    
+    setPendingChanges({});
+    setSaving(false);
+    alert("同步成功！");
   };
+
+  if (loading) return <div className="p-10 text-center">讀取福岡行程中...</div>;
+
+  const currentStore = stores.find(s => s.storeId === selectedStoreId);
+  const filteredItems = allItems.filter(item => {
+    if (item.storeId !== selectedStoreId) return false;
+    if (filter === 'To Buy') return !item.isChecked;
+    if (filter === 'Done') return item.isChecked;
+    return true;
+  });
 
   return (
-    <div style={{ padding: "15px", maxWidth: "500px", margin: "0 auto", backgroundColor: "#f9f9f9", minHeight: "100vh" }}>
-      <h2 style={{ textAlign: "center", color: "#333" }}>福岡購物清單 🇯🇵</h2>
-      
-      {/* 店舖選擇按鈕 */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "15px" }}>
-        {stores.map(s => (
-          <button 
-            key={s.storeId} 
-            onClick={() => fetchItemsByStore(s)}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "20px",
-              border: "1px solid #ddd",
-              backgroundColor: selectedStore?.storeId === s.storeId ? "#007aff" : "#fff",
-              color: selectedStore?.storeId === s.storeId ? "#fff" : "#333",
-              fontSize: "14px"
-            }}
-          >
-            {s.storeName}
-          </button>
+    <div className="max-w-md mx-auto bg-gray-50 min-h-screen pb-20">
+      {/* 店舖導航 */}
+      <div className="sticky top-0 bg-white shadow-md z-10">
+        <div className="flex overflow-x-auto p-2 gap-2 border-b">
+          {stores.map(store => (
+            <button
+              key={store.storeId}
+              onClick={() => setSelectedStoreId(store.storeId)}
+              className={`px-4 py-2 rounded-full whitespace-nowrap text-sm ${
+                selectedStoreId === store.storeId ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              {store.storeName}
+            </button>
+          ))}
+        </div>
+
+        {/* 店舖資訊 */}
+        {currentStore && (
+          <div className="p-3 text-xs text-gray-600 bg-blue-50">
+            <p>📍 {currentStore.address}</p>
+            <p>⏰ {currentStore.openingHours} | 🕒 預計停留: {currentStore.visitTime}</p>
+          </div>
+        )}
+
+        {/* 狀態過濾器 */}
+        <div className="flex border-b">
+          {['All', 'To Buy', 'Done'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`flex-1 py-2 text-sm ${filter === f ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : ''}`}
+            >
+              {f === 'All' ? '全部' : f === 'To Buy' ? '未買' : '已買'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 購物清單 */}
+      <div className="p-4 space-y-4">
+        {filteredItems.map(item => (
+          <div key={item.itemId} className="flex items-center bg-white p-3 rounded-lg shadow-sm">
+            <img 
+              src={item.imageUrl || 'https://via.placeholder.com/60'} 
+              alt={item.itemName}
+              className="w-16 h-16 object-cover rounded mr-4"
+              onError={(e) => e.target.src = 'https://via.placeholder.com/60'}
+            />
+            <div className="flex-1">
+              <h3 className={`font-medium ${item.isChecked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                {item.itemName}
+              </h3>
+            </div>
+            <input 
+              type="checkbox" 
+              checked={item.isChecked}
+              onChange={() => handleCheck(item.itemId, item.isChecked)}
+              className="w-6 h-6 rounded border-gray-300 text-blue-600"
+            />
+          </div>
         ))}
       </div>
 
-      {selectedStore && (
-        <div style={{ backgroundColor: "#fff", padding: "15px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
-          <h3 style={{ margin: "0 0 5px 0" }}>{selectedStore.storeName}</h3>
-          <p style={{ fontSize: "12px", color: "#888", marginBottom: "15px" }}>{selectedStore.address}</p>
-
-          {/* 分頁與儲存 */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
-            <div style={{ display: "flex", gap: "5px" }}>
-              {["all", "toBuy", "done"].map(t => (
-                <button key={t} onClick={() => setTab(t)} style={{
-                  padding: "5px 10px", fontSize: "12px", borderRadius: "4px", border: "none",
-                  backgroundColor: tab === t ? "#eee" : "transparent"
-                }}>
-                  {t === "all" ? "全部" : t === "toBuy" ? "未買" : "已買"}
-                </button>
-              ))}
-            </div>
-            <button 
-              onClick={handleSave} 
-              disabled={checkedItems.size === 0 || loading}
-              style={{ padding: "6px 15px", backgroundColor: "#28a745", color: "#fff", border: "none", borderRadius: "6px", fontWeight: "bold" }}
-            >
-              {loading ? "..." : "儲存"}
-            </button>
-          </div>
-
-          {/* 商品列表 */}
-          {displayItems.map(item => (
-            <div key={item.itemId} style={{ display: "flex", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f0f0f0" }}>
-              <img src={item.imageUrl} width="45" height="45" style={{ borderRadius: "5px", marginRight: "10px", objectFit: "cover" }} />
-              <span style={{ flex: 1, fontSize: "15px", textDecoration: item.isChecked === "true" ? "line-through" : "none", color: item.isChecked === "true" ? "#ccc" : "#333" }}>
-                {item.itemName}
-              </span>
-              <input 
-                type="checkbox" 
-                checked={item.isChecked === "true"} 
-                onChange={(e) => handleCheck(item.itemId, e.target.checked)}
-                style={{ width: "20px", height: "20px" }}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 底部同步按鈕 */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t max-w-md mx-auto">
+        <button
+          onClick={handleSync}
+          disabled={Object.keys(pendingChanges).length === 0 || saving}
+          className={`w-full py-3 rounded-xl font-bold text-white transition ${
+            Object.keys(pendingChanges).length === 0 ? 'bg-gray-400' : 'bg-green-600 active:bg-green-700'
+          }`}
+        >
+          {saving ? '同步中...' : `儲存改動 (${Object.keys(pendingChanges).length})`}
+        </button>
+      </div>
     </div>
   );
 }
