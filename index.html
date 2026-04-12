@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌸 福岡購物助手 🌸</title>
+    <title>🌸 福岡購物助手 Pro 🌸</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
@@ -30,6 +30,8 @@
         input[type="checkbox"] { appearance: none; cursor: pointer; position: relative; }
         input[type="checkbox"]::before { content: "🤍"; font-size: 1.5rem; position: absolute; left: -5px; top: -5px; }
         input[type="checkbox"]:checked::before { content: "💖"; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-kawaii-yellow/30 min-h-screen pb-32">
@@ -37,14 +39,14 @@
         
         <div v-if="loading" class="fixed inset-0 bg-white/80 flex flex-col items-center justify-center z-50">
             <div class="text-7xl mb-6 kawaii-bounce">✈️</div>
-            <div class="text-xl font-bold">正在整理福岡清單...</div>
+            <div class="text-xl font-bold">同步清單中...</div>
         </div>
 
         <div v-else>
             <div class="sticky top-0 bg-white/95 shadow-sm z-10 rounded-b-2xl backdrop-blur-sm border-b border-kawaii-pink/50 p-3">
                 <div class="flex justify-between items-center mb-3 px-1">
-                    <h1 class="text-xl font-bold">🌸 福岡購物 🌸</h1>
-                    <button @click="showAddModal = true" class="bg-kawaii-blue px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:scale-105 transition">＋新增項目</button>
+                    <h1 class="text-xl font-bold">🌸 福岡購物助手</h1>
+                    <button @click="openAddModal" class="bg-kawaii-blue px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:scale-105 transition">＋新增</button>
                 </div>
                 
                 <div class="flex overflow-x-auto gap-2 mb-3 no-scrollbar">
@@ -56,15 +58,15 @@
                     </button>
                 </div>
 
-                <div v-if="currentStore" class="mx-1 mb-3 p-3 bg-kawaii-yellow/60 rounded-xl border border-dashed border-kawaii-pink text-xs space-y-1">
+                <div v-if="currentStore" @click="openEditStore" class="mx-1 mb-3 p-3 bg-kawaii-yellow/60 rounded-xl border border-dashed border-kawaii-pink text-xs space-y-1 relative active:opacity-70 transition cursor-pointer">
                     <p class="flex items-start gap-1">
-                        <span>📍</span> 
-                        <span class="flex-1">{{ currentStore.address }}</span>
+                        <span>📍</span> <span class="flex-1">{{ currentStore.address }}</span>
                     </p>
                     <div class="flex justify-between font-semibold text-kawaii-text/70 pt-1 border-t border-kawaii-pink/30">
                         <p>⏰ {{ currentStore.openingHours }}</p>
                         <p class="text-blue-500">🕒 預計：{{ currentStore.visitTime }}</p>
                     </div>
+                    <div class="absolute -top-1 -right-1 text-[10px] bg-kawaii-pink text-white px-1.5 rounded-full">Edit</div>
                 </div>
 
                 <div class="flex bg-gray-50 rounded-xl p-1 mx-1">
@@ -79,54 +81,101 @@
             <div class="p-4 space-y-4">
                 <div v-for="item in filteredItems" :key="item.itemId" 
                     class="flex items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 active:bg-gray-50 transition">
-                    <img :src="item.imageUrl || 'https://via.placeholder.com/60?text=No+Photo'" class="w-16 h-16 object-cover rounded-xl mr-4 border border-kawaii-pink/20 shadow-inner" @error="$event.target.src='https://via.placeholder.com/60?text=No+Photo'">
-                    <div class="flex-1">
+                    <img @click="openEditItem(item)" :src="item.imageUrl || 'https://via.placeholder.com/60?text=No+Photo'" class="w-16 h-16 object-cover rounded-xl mr-4 border border-kawaii-pink/20 shadow-inner cursor-pointer">
+                    <div class="flex-1 cursor-pointer" @click="openEditItem(item)">
                         <h3 :class="['font-bold text-base', item.isChecked ? 'line-through-dim' : 'text-kawaii-text']">{{ item.itemName }}</h3>
                     </div>
                     <input type="checkbox" v-model="item.isChecked" @change="addPending(item)" class="w-7 h-7">
                 </div>
-                <div v-if="filteredItems.length === 0" class="text-center py-10 text-gray-400 text-sm">
-                    呢度暫時冇嘢喎～🌸
+                <div v-if="filteredItems.length === 0" class="text-center py-10 text-gray-400 text-sm italic">
+                    呢間舖暫時冇嘢買喎～✨
                 </div>
             </div>
 
             <div v-if="showAddModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end z-50" @click.self="showAddModal = false">
-                <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up">
-                    <div class="flex justify-between mb-5">
-                        <h2 class="text-xl font-bold">📸 影張相記低佢</h2>
+                <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex bg-gray-100 p-1 rounded-xl">
+                            <button @click="addMode = 'item'" :class="['px-4 py-1.5 rounded-lg text-sm font-bold transition', addMode === 'item' ? 'bg-white shadow-sm' : 'text-gray-400']">商品</button>
+                            <button @click="addMode = 'store'" :class="['px-4 py-1.5 rounded-lg text-sm font-bold transition', addMode === 'store' ? 'bg-white shadow-sm' : 'text-gray-400']">商店</button>
+                        </div>
                         <button @click="showAddModal = false" class="text-gray-300 text-3xl">&times;</button>
                     </div>
 
                     <div class="space-y-4">
-                        <div class="flex items-center gap-4 border-2 border-dashed border-kawaii-blue/50 p-4 rounded-2xl bg-kawaii-blue/5">
-                            <div v-if="newItem.imageUrl" class="relative">
-                                <img :src="newItem.imageUrl" class="w-24 h-24 object-cover rounded-xl shadow-md">
-                                <button @click="newItem.imageUrl = ''" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs shadow-lg">✕</button>
+                        <template v-if="addMode === 'item'">
+                            <div class="flex items-center gap-4 border-2 border-dashed border-kawaii-blue/50 p-4 rounded-2xl bg-kawaii-blue/5">
+                                <div v-if="newItem.imageUrl" class="relative">
+                                    <img :src="newItem.imageUrl" class="w-24 h-24 object-cover rounded-xl">
+                                    <button @click="newItem.imageUrl = ''" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">✕</button>
+                                </div>
+                                <label v-else class="flex flex-col items-center justify-center w-24 h-24 bg-white rounded-xl cursor-pointer shadow-sm">
+                                    <span class="text-3xl">📷</span>
+                                    <input type="file" accept="image/*" class="hidden" @change="uploadToCloudinary">
+                                </label>
+                                <div class="flex-1">
+                                    <p class="font-bold text-gray-700 text-sm">商品實拍</p>
+                                    <p class="text-xs mt-1 text-gray-400">{{ uploadStatus }}</p>
+                                </div>
                             </div>
-                            <label v-else class="flex flex-col items-center justify-center w-24 h-24 bg-white rounded-xl cursor-pointer hover:bg-gray-50 border border-gray-100 shadow-sm transition">
-                                <span class="text-3xl">📷</span>
-                                <span class="text-[10px] mt-1 font-bold text-gray-400 uppercase tracking-wider">Upload</span>
-                                <input type="file" accept="image/*" class="hidden" @change="uploadToCloudinary">
-                            </label>
-                            <div class="flex-1">
-                                <p class="font-bold text-gray-700 text-sm">商品實拍</p>
-                                <p class="text-xs mt-1" :class="isUploading ? 'text-blue-500 kawaii-bounce' : 'text-gray-400'">{{ uploadStatus }}</p>
+                            <input v-model="newItem.itemName" type="text" placeholder="商品名稱" class="w-full p-4 bg-gray-50 rounded-2xl font-bold">
+                            <div>
+                                <p class="mb-2 ml-1 text-xs font-bold text-gray-400 uppercase">Store Location</p>
+                                <select v-model="newItem.storeId" class="w-full p-4 bg-gray-100 rounded-2xl font-semibold">
+                                    <option v-for="s in stores" :key="s.storeId" :value="s.storeId">{{ s.storeName }}</option>
+                                </select>
                             </div>
-                        </div>
+                        </template>
 
-                        <input v-model="newItem.itemName" type="text" placeholder="想買啲咩？" class="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 ring-kawaii-blue font-bold">
-                        
-                        <div>
-                            <p class="mb-2 ml-1 text-xs font-bold text-gray-400 uppercase tracking-widest">Store Location</p>
-                            <select v-model="newItem.storeId" class="w-full p-4 bg-gray-100 rounded-2xl outline-none font-semibold">
+                        <template v-else>
+                            <input v-model="newStore.storeName" type="text" placeholder="商店名稱" class="w-full p-4 bg-gray-50 rounded-2xl font-bold">
+                            <input v-model="newStore.address" type="text" placeholder="詳細地址" class="w-full p-4 bg-gray-50 rounded-2xl font-semibold">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input v-model="newStore.openingHours" type="text" placeholder="營業時間" class="w-full p-4 bg-gray-50 rounded-2xl text-sm">
+                                <input v-model="newStore.visitTime" type="text" placeholder="預計抵達" class="w-full p-4 bg-gray-50 rounded-2xl text-sm">
+                            </div>
+                        </template>
+
+                        <button @click="handleAction('add')" :disabled="isUploading || saving" 
+                            class="w-full py-4 bg-kawaii-blue rounded-2xl font-bold text-kawaii-text shadow-lg active:scale-95 transition disabled:bg-gray-200">
+                            確定加入 ✨
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showEditModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end z-50" @click.self="showEditModal = false">
+                <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up max-h-[90vh] overflow-y-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold text-kawaii-text">✏️ 修改資訊</h2>
+                        <button @click="showEditModal = false" class="text-gray-300 text-3xl">&times;</button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <template v-if="editType === 'item'">
+                            <input v-model="editingData.itemName" type="text" class="w-full p-4 bg-gray-50 rounded-2xl font-bold border border-gray-200">
+                            <select v-model="editingData.storeId" class="w-full p-4 bg-gray-100 rounded-2xl font-semibold border border-gray-200">
                                 <option v-for="s in stores" :key="s.storeId" :value="s.storeId">{{ s.storeName }}</option>
                             </select>
-                        </div>
+                        </template>
 
-                        <button @click="addNewItemToSheet" :disabled="isUploading || !newItem.itemName" 
-                            class="w-full py-4 bg-kawaii-blue rounded-2xl font-bold text-kawaii-text shadow-lg active:scale-95 transition disabled:bg-gray-200 disabled:shadow-none">
-                            加入清單 ✨
-                        </button>
+                        <template v-else>
+                            <input v-model="editingData.storeName" type="text" class="w-full p-4 bg-gray-50 rounded-2xl font-bold border border-gray-200">
+                            <input v-model="editingData.address" type="text" class="w-full p-4 bg-gray-50 rounded-2xl font-semibold border border-gray-200">
+                            <div class="grid grid-cols-2 gap-3">
+                                <input v-model="editingData.openingHours" type="text" class="w-full p-4 bg-gray-50 rounded-2xl text-sm border border-gray-200">
+                                <input v-model="editingData.visitTime" type="text" class="w-full p-4 bg-gray-50 rounded-2xl text-sm border border-gray-200">
+                            </div>
+                        </template>
+
+                        <div class="flex gap-3 pt-4">
+                            <button @click="handleAction('delete')" :disabled="saving" class="flex-1 py-4 bg-red-50 text-red-500 rounded-2xl font-bold border border-red-100 active:scale-95 transition">
+                                🗑️ 刪除
+                            </button>
+                            <button @click="handleAction('update')" :disabled="saving" class="flex-[2] py-4 bg-kawaii-blue rounded-2xl font-bold text-kawaii-text shadow-lg active:scale-95 transition">
+                                {{ saving ? '更新中...' : '儲存修改 ✨' }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -134,8 +183,7 @@
             <div class="fixed bottom-0 left-0 right-0 p-4 pb-10 bg-white/90 border-t border-gray-100 max-w-md mx-auto shadow-2xl backdrop-blur-md rounded-t-3xl">
                 <button @click="handleSync" :disabled="pendingCount === 0 || saving"
                     :class="['w-full py-4 rounded-2xl font-bold text-white shadow-lg transition-all', 
-                            pendingCount === 0 ? 'bg-gray-300' : 'bg-kawaii-pink active:scale-95 hover:shadow-pink-200']">
-                    <span v-if="saving" class="inline-block animate-spin mr-2">⏳</span>
+                            pendingCount === 0 ? 'bg-gray-300' : 'bg-kawaii-pink active:scale-95']">
                     {{ saving ? '正在同步...' : `儲存進度 (x${pendingCount}) ✨` }}
                 </button>
             </div>
@@ -158,12 +206,22 @@
                 const pendingChanges = ref({});
                 const loading = ref(true);
                 const saving = ref(false);
+
+                // Add Logic
                 const showAddModal = ref(false);
+                const addMode = ref('item'); 
                 const isUploading = ref(false);
                 const uploadStatus = ref('未選擇圖片');
                 const newItem = ref({ itemName: '', storeId: '', imageUrl: '' });
+                const newStore = ref({ storeName: '', address: '', openingHours: '', visitTime: '' });
+
+                // Edit Logic
+                const showEditModal = ref(false);
+                const editType = ref('item'); // 'item' or 'store'
+                const editingData = ref({});
 
                 const fetchData = async () => {
+                    loading.value = true;
                     try {
                         const res = await fetch(GAS_URL);
                         const data = await res.json();
@@ -172,12 +230,28 @@
                             ...item,
                             isChecked: String(item.isChecked).toUpperCase() === 'TRUE'
                         }));
-                        if (stores.value.length > 0) {
+                        if (!selectedStoreId.value && stores.value.length > 0) {
                             selectedStoreId.value = stores.value[0].storeId;
-                            newItem.value.storeId = stores.value[0].storeId;
                         }
-                    } catch (e) { alert("讀取清單失敗，請檢查網路！"); }
+                    } catch (e) { console.error(e); }
                     loading.value = false;
+                };
+
+                const openAddModal = () => {
+                    newItem.value.storeId = selectedStoreId.value;
+                    showAddModal.value = true;
+                };
+
+                const openEditItem = (item) => {
+                    editType.value = 'item';
+                    editingData.value = { ...item };
+                    showEditModal.value = true;
+                };
+
+                const openEditStore = () => {
+                    editType.value = 'store';
+                    editingData.value = { ...currentStore.value };
+                    showEditModal.value = true;
                 };
 
                 const uploadToCloudinary = async (event) => {
@@ -193,34 +267,51 @@
                         const data = await res.json();
                         newItem.value.imageUrl = data.secure_url;
                         uploadStatus.value = '✅ 搞掂！';
-                    } catch (e) { uploadStatus.value = '❌ 出錯咗'; }
+                    } catch (e) { uploadStatus.value = '❌ 失敗'; }
                     finally { isUploading.value = false; }
                 };
 
-                const addNewItemToSheet = async () => {
+                const handleAction = async (type) => {
+                    if (type === 'delete' && !confirm('真係要刪除？唔好後悔喎！')) return;
+                    
                     saving.value = true;
-                    const payload = { action: 'addItem', ...newItem.value, itemId: Date.now().toString() };
+                    let payload = {};
+
+                    if (type === 'add') {
+                        if (addMode.value === 'item') {
+                            if (!newItem.value.itemName) return alert("填名先啦！");
+                            payload = { action: 'addItem', ...newItem.value, itemId: "ITEM_" + Date.now() };
+                        } else {
+                            if (!newStore.value.storeName) return alert("舖頭名呢？");
+                            payload = { action: 'addStore', ...newStore.value, storeId: "STORE_" + Date.now() };
+                        }
+                    } else if (type === 'update') {
+                        const action = editType.value === 'item' ? 'updateItem' : 'updateStore';
+                        payload = { action, ...editingData.value };
+                    } else if (type === 'delete') {
+                        const action = editType.value === 'item' ? 'deleteItem' : 'deleteStore';
+                        payload = { action, ...editingData.value };
+                    }
+
                     try {
                         await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                        alert("已加入 Sheets！記得重新整理網頁。");
                         showAddModal.value = false;
-                        newItem.value = { itemName: '', storeId: selectedStoreId.value, imageUrl: '' };
-                    } catch (e) { alert("新增失敗"); }
+                        showEditModal.value = false;
+                        alert("操作成功！✨");
+                        await fetchData(); // 重新整理資料
+                    } catch (e) { alert("失敗咗 😿"); }
                     saving.value = false;
                 };
 
                 const currentStore = computed(() => stores.value.find(s => s.storeId === selectedStoreId.value));
                 const filteredItems = computed(() => {
-                    return allItems.value.filter(item => {
-                        if (item.storeId !== selectedStoreId.value) return false;
-                        if (filter.value === 'To Buy') return !item.isChecked;
-                        if (filter.value === 'Done') return item.isChecked;
-                        return true;
-                    });
+                    return allItems.value.filter(item => item.storeId === selectedStoreId.value && 
+                        (filter.value === 'All' || (filter.value === 'To Buy' ? !item.isChecked : item.isChecked)));
                 });
 
                 const addPending = (item) => { pendingChanges.value[item.itemId] = item.isChecked; };
                 const pendingCount = computed(() => Object.keys(pendingChanges.value).length);
+                
                 const handleSync = async () => {
                     saving.value = true;
                     const payload = Object.keys(pendingChanges.value).map(id => ({ itemId: id, isChecked: pendingChanges.value[id] }));
@@ -228,12 +319,18 @@
                         await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
                         alert("同步成功！🌸");
                         pendingChanges.value = {};
-                    } catch (e) { alert("儲存失敗"); }
+                        await fetchData();
+                    } catch (e) { alert("同步失敗"); }
                     saving.value = false;
                 };
 
                 onMounted(fetchData);
-                return { stores, allItems, selectedStoreId, filter, loading, saving, currentStore, filteredItems, addPending, pendingCount, handleSync, showAddModal, newItem, uploadToCloudinary, isUploading, uploadStatus, addNewItemToSheet };
+                return { 
+                    stores, allItems, selectedStoreId, filter, loading, saving, currentStore, filteredItems, 
+                    addPending, pendingCount, handleSync, showAddModal, addMode, newItem, newStore, 
+                    uploadToCloudinary, isUploading, uploadStatus, 
+                    showEditModal, editType, editingData, openAddModal, openEditItem, openEditStore, handleAction 
+                };
             }
         }).mount('#app');
     </script>
